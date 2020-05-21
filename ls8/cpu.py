@@ -2,6 +2,16 @@
 
 import sys
 
+LDI = 0b10000010 # load immediate
+PRN = 0b01000111 # print value of integer saved to register address
+HLT = 0b00000001 # halt program
+MUL = 0b10100010 # multiplication
+PUSH = 0b01000101 # 69
+POP = 0b01000110 # 70
+CALL = 0b01010000 # 80
+RET = 0b00010001 # 17 - return
+ADD = 0b10100000 # 160
+
 
 # # Day 1: Get print8.ls8 running
 # #  Inventory what is here
@@ -133,37 +143,37 @@ import sys
 
 
 
-
-# Day 2: Add the ability to load files dynamically, get mult.ls8 running
-#  Un-hardcode the machine code
-#  Implement the load() function to load an .ls8 file given the filename passed in as an argument
-#  Implement a Multiply instruction (run mult.ls8)
-
 class CPU:
     """Main CPU class."""
 
     def __init__(self):
-        """Construct a new CPU."""
         self.memory = [0]*256
         self.register = [0]*8
         self.pc = 0 # program counter
         self.register[7] = 0b11110100 # 244
         self.run_logic = True
 
+    def load(self):
+        if len(sys.argv) != 2:                                  # Load into memory
+            print("to use: python ls8.py examples/mult.ls8")
+            sys.exit(1)
 
-    def load(self):                                         # load program into memory
+        try:
+            address = 0
+            with open(sys.argv[1]) as f:
+                for line in f:
+                    comment_split = line.split('#')             # extract number from file
+                    num = comment_split[0].strip()
 
-        address = 0
-        with open(sys.argv[1]) as f:
-            for line in f:
-                comment_split = line.split('#')             # extract number from file
-                num = comment_split[0].strip()
-                print(f'{num}')
-                if num != "":                               # save number to memory if exists
-                    value = int(num, 2)
-                    self.memory_write(value, address)
-                    address += 1
+                    if num != "":                               # print out asm instruction
+                        print(f'{num}')
+                        value = int(num, 2)                     # save number to memory if exists
+                        self.memory_write(value, address)
+                        address += 1
 
+        except FileNotFoundError:
+            print(f"{sys.argv[0]}: {sys.argv[1]} not found")
+            sys.exit(2)
 
     def alu(self, op, register_a, register_b):
         """
@@ -196,8 +206,6 @@ class CPU:
         for i in range(8):
             print(" %02X" % self.register[i], end='')
 
-        print()
-
     def memory_read(self, MAR):
         return self.memory[MAR]
 
@@ -205,35 +213,51 @@ class CPU:
         self.memory[MAR] = MDR
         return
 
+    def instruction_switch_run(self, IR, operand_a, operand_b):
+        if IR == LDI:
+            self.register[operand_a] = operand_b
+            self.pc += 3                                       
+        elif IR == PRN:
+            print(self.register[operand_a])
+            self.pc += 2
+        elif IR == MUL:                                         
+            self.alu("MUL", operand_a, operand_b)
+            self.pc += 3
+        elif IR == HLT:
+            self.run_logic = False
+        elif IR == PUSH:
+            value = self.register[operand_a]
+            self.register[7] -= 1
+            self.memory_write(value, self.register[7])
+            self.pc += 2
+        elif IR == POP:
+            self.register[operand_a] = self.memory_read(self.register[7])
+            value = self.register[operand_a]
+            self.register[7] += 1
+            self.pc += 2
+        elif IR == CALL:
+            call_address = self.pc + 2
+            self.register[7] -= 1
+            self.memory_write(call_address, self.register[7])
+            self.pc = self.register[operand_a]
+        elif IR == RET:
+            ret_address = self.register[7]
+            self.pc = self.memory_read(ret_address)
+            self.register[7] += 1
+        elif IR == ADD:                                       
+            self.alu("ADD", operand_a, operand_b)
+            self.pc += 3
+        else:
+            print(f"{IR} - command is not available")
+            sys.exit()
+
     def run(self):
-
-        logic = True
-
-                                                            # Instructions
-        LDI = 0b10000010 
-        PRN = 0b01000111 
-        HLT = 0b00000001 
-        MUL = 0b10100010 
-
-        while logic:
-            IR = self.memory_read(self.pc)                  # read in instruction
-            operand_a = self.memory_read(self.pc + 1)       # read in integer
-            operand_b = self.memory_read(self.pc + 2)
-
-            if IR == LDI:
-                self.register[operand_a] = operand_b
-                self.pc += 3                                # increments to next instruction line
-            elif IR == PRN:
-                print(self.register[operand_a])
-                self.pc += 2
-            elif IR == MUL:
-                self.alu("MUL", operand_a, operand_b)       # call alu to perform multiplication
-                self.pc += 3
-            elif IR == HLT:
-                break
-            else:
-                print(f"{IR} - command is not available")
-                sys.exit()
+        while self.run_logic:                                           # instructions
+            IR = self.memory_read(self.pc)
+            operand_a = self.memory_read(self.pc + 1)                   # read in integer
+            operand_b = self.memory_read(self.pc + 2)                   # receive instruction and perform task
+            self.instruction_switch_run(IR, operand_a, operand_b)
 
 
-# python ls8.py examples/mult.ls8
+
+# # python ls8.py examples/mult.ls8
